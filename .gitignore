@@ -1,8 +1,4 @@
-filtered_grievance_data_zh.csv
-filtered_grievance_data_en.csv
-demo_zh.csv
-demo_en.csv
-demo_es.csv
-demo_tr.csv
-demo_fr.csv
+data/
+*.csv
+__pycache__/
 .DS_Store
