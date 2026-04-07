@@ -87,10 +87,12 @@ for lang in languages:
                         
                         clean_name = grievance.replace("narrative_", "").upper()
                         
-                        # Logging only significant or interesting results to terminal to keep it clean
+                        # Logging ALL results to terminal
                         if p_val < 0.05:
                             print(f" ⭐ {country.upper()} | {clean_name} causes Protests (p={p_val:.4f}) at {lag} lags")
                             found_sig = True
+                        else:
+                            print(f"  - {country.upper()} | {clean_name} not significant (p={p_val:.4f}) at {lag} lags")
 
                         master_results.append({
                             'Language': lang.upper(),
@@ -101,8 +103,9 @@ for lang in languages:
                             'Significant': 'Yes' if p_val < 0.05 else 'No'
                         })
                 
+                # You might want to keep or remove this line now that everything prints
                 if not found_sig and lag == 14:
-                    print(f"  . {country.upper()} checked (no significant results).")
+                    print(f"  . {country.upper()} checked (no significant results overall).")
 
         except Exception:
             # Skip countries where math fails due to zero variance
