@@ -1,4 +1,16 @@
-import pandas as pd
+import os
+
+# The list of languages we decided to keep
+LANGUAGES = {
+    'id': 'Indonesian', 'bg': 'Bulgarian', 'cs': 'Czech', 'de': 'German',
+    'el': 'Greek', 'hu': 'Hungarian', 'it': 'Italian', 'pl': 'Polish',
+    'ko': 'Korean', 'zh': 'Cantonese', 'bn': 'Bengali', 'ta': 'Tamil',
+    'vi': 'Vietnamese', 'ca': 'Catalan', 'ky': 'Kyrgyz'
+}
+
+# The template based on your VAR_tr.py
+# Double curly braces {{ }} are used for code that should remain in the final file
+template = """import pandas as pd
 from statsmodels.tsa.api import VAR
 import warnings
 import os
@@ -15,17 +27,17 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(os.path.dirname(script_dir), "data")
 os.makedirs(data_dir, exist_ok=True)
 
-# Load the Cantonese data
-input_path = os.path.join(data_dir, "var_input_zh.csv")
+# Load the {lang_name} data
+input_path = os.path.join(data_dir, "var_input_{lang_code}.csv")
 if not os.path.exists(input_path):
-    print(f"File not found: {input_path}")
+    print(f"File not found: {{input_path}}")
     exit()
 
 df = pd.read_csv(input_path, index_col='date_publish', parse_dates=True)
 
 # Apply Differencing 
 df_diff = df.diff().dropna()
-print("Data differenced. Modeling daily 'shocks' for Cantonese data.")
+print("Data differenced. Modeling daily 'shocks' for {lang_name} data.")
 
 # List of grievance columns
 grievance_columns = [
@@ -34,7 +46,7 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Cantonese specific protest events!
+# NOTE: Update these timestamps for {lang_name} specific protest events!
 protest_starts = [
     pd.Timestamp("2024-01-01"), 
 ]
@@ -54,7 +66,7 @@ for start in protest_starts:
             window.index.name = 'lag'
             all_windows.append(window)
     except Exception as e:
-        print(f"Could not process window for {start}: {e}")
+        print(f"Could not process window for {{start}}: {{e}}")
 
 if all_windows:
     avg_window = pd.concat(all_windows).groupby(level=0).mean()
@@ -69,11 +81,11 @@ if all_windows:
     ax.axvline(0, color='red', linestyle='--', linewidth=1, label='Protest Start')
     ax.set_xlabel("Days before protest (0 = protest start)")
     ax.set_ylabel("Avg differenced narrative score")
-    ax.set_title(f"Average Grievance Trajectory - Cantonese ({len(all_windows)} Windows)")
+    ax.set_title(f"Average Grievance Trajectory - {lang_name} ({{len(all_windows)}} Windows)")
     ax.invert_xaxis() 
     ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=8)
     plt.tight_layout()
-    plt.savefig(os.path.join(data_dir, "avg_preprotest_trajectory_zh.png"), dpi=150)
+    plt.savefig(os.path.join(data_dir, "avg_preprotest_trajectory_{lang_code}.png"), dpi=150)
     plt.close()
 
 # Initialize the VAR Model
@@ -82,7 +94,7 @@ lags_to_test = [7, 14]
 
 for lag in lags_to_test:
     results = model.fit(lag)
-    print(f"\n========== CANTONESE GRANGER CAUSALITY RESULTS ({lag}-DAY LAG) ==========")
+    print(f"\\n========== {lang_upper} GRANGER CAUSALITY RESULTS ({{lag}}-DAY LAG) ==========")
     for grievance in grievance_columns:
         if grievance in df_diff.columns:
             target = 'narrative_protest_outcome' 
@@ -91,7 +103,7 @@ for lag in lags_to_test:
                 p_val = test_result.pvalue
                 significance = "⭐ SIGNIFICANT" if p_val < 0.05 else "Not Significant"
                 clean_name = grievance.replace("narrative_", "").upper()
-                print(f"{clean_name.ljust(15)} -> PROTESTS : p-value = {p_val:.4f} | {significance}")
+                print(f"{{clean_name.ljust(15)}} -> PROTESTS : p-value = {{p_val:.4f}} | {{significance}}")
 
 # Temporal Pearson logic
 records = []
@@ -109,13 +121,28 @@ for start in protest_starts:
                 aligned = pd.concat([shifted, pd.Series(protest_binary, index=window.index)], axis=1).dropna()
                 if len(aligned) > 5:
                     corr, p_val = pearsonr(aligned.iloc[:, 0], aligned.iloc[:, 1])
-                    records.append({
+                    records.append({{
                         'grievance': grievance, 'lag': lag,
                         'protest': str(start.date()), 'correlation': corr, 'p_value': p_val
-                    })
+                    }})
 
 if records:
     results_df = pd.DataFrame(records)
-    output_path = os.path.join(data_dir, "lagged_correlations_zh.csv")
+    output_path = os.path.join(data_dir, "lagged_correlations_{lang_code}.csv")
     results_df.to_csv(output_path, index=False)
-    print(f"Saved lagged correlations to: {output_path}")
+    print(f"Saved lagged correlations to: {{output_path}}")
+"""
+
+for code, name in LANGUAGES.items():
+    # Pre-calculating the uppercase name to avoid method calls in .format()
+    file_content = template.format(
+        lang_code=code, 
+        lang_name=name, 
+        lang_upper=name.upper()
+    )
+    filename = f"VAR_{code}.py"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(file_content)
+    print(f"Generated {filename}")
+
+print("\nDone! All language scripts created.")

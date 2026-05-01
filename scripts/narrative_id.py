@@ -13,12 +13,12 @@ data_dir = os.path.abspath(os.path.join(script_dir, "..", "data"))
 # Setup Stopwords
 nltk.download('stopwords', quiet=True)
 try:
-    stop_words_list = stopwords.words('chinese')
+    stop_words_list = stopwords.words('indonesian')
 except:
     stop_words_list = []
 
 # Load Input (Updated to use sample_*.csv)
-input_path = os.path.join(data_dir, "sample_zh.csv")
+input_path = os.path.join(data_dir, "sample_id.csv")
 if not os.path.exists(input_path):
     print(f"File not found: {input_path}")
     exit()
@@ -32,10 +32,10 @@ df_sample = df.sample(n=min(10000, len(df)), random_state=42).sort_values('date_
 docs = df_sample['maintext'].tolist()
 timestamps = df_sample['date_publish'].tolist()
 
-print(f"Training BERTopic on {len(docs)} Chinese articles...")
+print(f"Training BERTopic on {len(docs)} Indonesian articles...")
 
 # Run BERTopic with Translated Seeds
-seed_topic_list = [['抗議', '示威', '罷工'], ['政府', '政治'], ['民主', '改革'], ['國際', '全球'], ['宗教', '教會'], ['選舉', '投票'], ['經濟', '價格'], ['政變', '軍事'], ['暴力', '戰爭']]
+seed_topic_list = [['protes', 'demonstrasi', 'pemogokan'], ['pemerintah', 'politik'], ['demokrasi', 'reformasi'], ['internasional', 'global'], ['agama', 'masjid'], ['pemilu', 'suara'], ['ekonomi', 'harga'], ['kudeta', 'militer'], ['kekerasan', 'perang']]
 vectorizer = CountVectorizer(stop_words=stop_words_list)
 multilingual_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
@@ -53,8 +53,8 @@ df_sample["topic"] = topics
 
 # Save Pulse Data
 topics_over_time = topic_model.topics_over_time(docs, timestamps, nr_bins=20)
-topics_over_time.to_csv(os.path.join(data_dir, "narrative_pulse_data_zh.csv"))
-df_sample.to_csv(os.path.join(data_dir, "classified_articles_zh.csv"), index=False)
+topics_over_time.to_csv(os.path.join(data_dir, "narrative_pulse_data_id.csv"))
+df_sample.to_csv(os.path.join(data_dir, "classified_articles_id.csv"), index=False)
 
 # Format for VAR
 df_sample = df_sample[df_sample['topic'] != -1]  
@@ -74,5 +74,5 @@ daily_ts = daily_ts.rename(columns=topic_category_map)
 columns_to_keep = [col for col in topic_category_map.values() if col in daily_ts.columns]
 daily_ts = daily_ts[columns_to_keep]
 
-daily_ts.to_csv(os.path.join(data_dir, "var_input_zh.csv")) 
-print(f"--- FINAL VAR INPUT READY (ZH) ---")
+daily_ts.to_csv(os.path.join(data_dir, "var_input_id.csv")) 
+print(f"--- FINAL VAR INPUT READY (ID) ---")

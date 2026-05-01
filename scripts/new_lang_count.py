@@ -4,7 +4,7 @@ import csv
 import os
 
 REPO = "intfloat/multilingual_cc_news"
-SIZE_LIMIT_GB = 5.0
+SIZE_LIMIT_GB = 0.5
 BYTE_LIMIT = SIZE_LIMIT_GB * 1024 * 1024 * 1024
 
 LANGUAGES = {
@@ -18,20 +18,23 @@ LANGUAGES = {
     'it': 'Italian',
     'pl': 'Polish',
     'ko': 'Korean',
-    'ru': 'Russian',
-    'tl': 'Tagalog',
     'zh': 'Cantonese',
     'bn': 'Bengali',
-    'si': 'Sinhala',
     'ta': 'Tamil',
     'vi': 'Vietnamese',
-    'af': 'Afrikaans',
-    'ky': 'Kyrgyz',
     'ca': 'Catalan',
+    'ky': 'Kyrgyz', # Optional: keep if you need more diversity
 }
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(base_dir, "data")
+# Path to the 'scripts' folder
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Path to the parent folder (one level up)
+parent_dir = os.path.dirname(script_dir)
+
+# Path to the 'data' folder parallel to 'scripts'
+data_dir = os.path.join(parent_dir, "data")
+
 os.makedirs(data_dir, exist_ok=True)
 
 for lang in LANGUAGES:

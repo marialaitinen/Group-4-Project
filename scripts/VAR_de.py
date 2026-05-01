@@ -15,8 +15,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(os.path.dirname(script_dir), "data")
 os.makedirs(data_dir, exist_ok=True)
 
-# Load the Cantonese data
-input_path = os.path.join(data_dir, "var_input_zh.csv")
+# Load the German data
+input_path = os.path.join(data_dir, "var_input_de.csv")
 if not os.path.exists(input_path):
     print(f"File not found: {input_path}")
     exit()
@@ -25,7 +25,7 @@ df = pd.read_csv(input_path, index_col='date_publish', parse_dates=True)
 
 # Apply Differencing 
 df_diff = df.diff().dropna()
-print("Data differenced. Modeling daily 'shocks' for Cantonese data.")
+print("Data differenced. Modeling daily 'shocks' for German data.")
 
 # List of grievance columns
 grievance_columns = [
@@ -34,7 +34,7 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Cantonese specific protest events!
+# NOTE: Update these timestamps for German specific protest events!
 protest_starts = [
     pd.Timestamp("2024-01-01"), 
 ]
@@ -69,11 +69,11 @@ if all_windows:
     ax.axvline(0, color='red', linestyle='--', linewidth=1, label='Protest Start')
     ax.set_xlabel("Days before protest (0 = protest start)")
     ax.set_ylabel("Avg differenced narrative score")
-    ax.set_title(f"Average Grievance Trajectory - Cantonese ({len(all_windows)} Windows)")
+    ax.set_title(f"Average Grievance Trajectory - German ({len(all_windows)} Windows)")
     ax.invert_xaxis() 
     ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=8)
     plt.tight_layout()
-    plt.savefig(os.path.join(data_dir, "avg_preprotest_trajectory_zh.png"), dpi=150)
+    plt.savefig(os.path.join(data_dir, "avg_preprotest_trajectory_de.png"), dpi=150)
     plt.close()
 
 # Initialize the VAR Model
@@ -82,7 +82,7 @@ lags_to_test = [7, 14]
 
 for lag in lags_to_test:
     results = model.fit(lag)
-    print(f"\n========== CANTONESE GRANGER CAUSALITY RESULTS ({lag}-DAY LAG) ==========")
+    print(f"\n========== GERMAN GRANGER CAUSALITY RESULTS ({lag}-DAY LAG) ==========")
     for grievance in grievance_columns:
         if grievance in df_diff.columns:
             target = 'narrative_protest_outcome' 
@@ -116,6 +116,6 @@ for start in protest_starts:
 
 if records:
     results_df = pd.DataFrame(records)
-    output_path = os.path.join(data_dir, "lagged_correlations_zh.csv")
+    output_path = os.path.join(data_dir, "lagged_correlations_de.csv")
     results_df.to_csv(output_path, index=False)
     print(f"Saved lagged correlations to: {output_path}")
