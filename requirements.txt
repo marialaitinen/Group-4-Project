@@ -1,0 +1,8 @@
+pandas
+statsmodels
+bertopic
+sentence-transformers
+datasets
+scikit-learn
+nltk
+jieba
