@@ -34,9 +34,10 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Polish specific protest events!
 protest_starts = [
-    pd.Timestamp("2024-01-01"), 
+    pd.Timestamp("2023-10-01"), 
+    pd.Timestamp("2023-06-14"),
+    pd.Timestamp("2020-10-22")
 ]
 
 max_lag = 28

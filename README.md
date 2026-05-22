@@ -1,6 +1,7 @@
 go in order:
 
-1. extractor for each language
-2. country_tagger.py
-3. narrative for each language
-4. VAR per language or VAR_all_countries to get country level results
+1. new_lang_count.py
+2. narrrative_lang.py
+3. VAR_lang.py
+
+every language needs to have the protest dates updated!!

@@ -34,9 +34,9 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Indonesian specific protest events!
 protest_starts = [
-    pd.Timestamp("2024-01-01"), 
+    pd.Timestamp("2019-09-23"), 
+    pd.Timestamp("2025-08-25")
 ]
 
 max_lag = 28

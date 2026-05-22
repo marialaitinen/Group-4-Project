@@ -34,9 +34,10 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Korean specific protest events!
 protest_starts = [
-    pd.Timestamp("2024-01-01"), 
+    pd.Timestamp("2024-12-03"), 
+    pd.Timestamp("2024-11-24"), 
+    pd.Timestamp("2022-11-05")
 ]
 
 max_lag = 28

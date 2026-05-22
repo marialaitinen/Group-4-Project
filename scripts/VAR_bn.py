@@ -34,9 +34,10 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Bengali specific protest events!
 protest_starts = [
-    pd.Timestamp("2024-01-01"), 
+    pd.Timestamp("2025-07-01"), 
+    pd.Timestamp("2022-12-10"),
+    pd.Timestamp("2025-08-01")
 ]
 
 max_lag = 28

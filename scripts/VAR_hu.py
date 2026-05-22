@@ -34,9 +34,10 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# NOTE: Update these timestamps for Hungarian specific protest events!
 protest_starts = [
-    pd.Timestamp("2024-01-01"), 
+    pd.Timestamp("2018-12-12"), 
+    pd.Timestamp("2023-05-19"), 
+    pd.Timestamp("2025-12-13")
 ]
 
 max_lag = 28
