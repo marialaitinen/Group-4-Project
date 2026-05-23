@@ -86,8 +86,8 @@ if all_windows:
         
     ax_traj.axvline(0, color='red', linestyle='--', linewidth=2, label='Protest Start')
     ax_traj.set_xlabel("Days before protest (0 = protest start)", fontsize=12)
-    ax_traj.set_ylabel("Avg differenced narrative score", fontsize=12)
-    ax_traj.set_title(f"Average Grievance Trajectory Across {len(protest_starts)} Pre-Protest Windows (TR)", fontsize=16, pad=15)
+    ax_traj.set_ylabel("Agg Avg differenced narrative score", fontsize=12)
+    ax_traj.set_title(f"Aggregated Average Grievance Trajectory Across {len(protest_starts)} Pre-Protest Windows (TR)", fontsize=16, pad=15)
     ax_traj.invert_xaxis()
     ax_traj.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=11)
     
@@ -95,6 +95,36 @@ if all_windows:
     fig_traj.savefig(traj_path, dpi=150, bbox_inches='tight')
     plt.close(fig_traj)
     print(f"\nSaved Category 1: {traj_path}")
+
+#INDIVIDUAL ARITHMETHIC TRAJECTORIES
+
+if all_windows:
+    fig_indiv, axes_indiv = plt.subplots(1, len(protest_starts), 
+                                          figsize=(6 * len(protest_starts), 6), 
+                                          sharey=True, layout='constrained', squeeze=False)
+    axes_indiv = axes_indiv.flatten()
+    fig_indiv.suptitle("Individual Grievance Trajectories Per Protest Event (TR)", 
+                        fontsize=18, fontweight='bold', y=1.02)
+
+    for ax, window, start in zip(axes_indiv, all_windows, protest_starts):
+        for i, col in enumerate(grievance_columns):
+            label = col.replace("narrative_", "").upper()
+            ax.plot(window.index, window[col], marker='o', label=label,
+                    color=colors[i], linewidth=2, markersize=4)
+
+        ax.axvline(0, color='red', linestyle='--', linewidth=2, label='Protest Start')
+        ax.set_title(str(start.date()), fontsize=13, pad=10)
+        ax.set_xlabel("Days before protest", fontsize=11)
+        ax.invert_xaxis()
+        ax.grid(True, alpha=0.3)
+
+    axes_indiv[0].set_ylabel("Differenced narrative score", fontsize=12)
+    axes_indiv[-1].legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', fontsize=10)
+
+    indiv_traj_path = os.path.join(data_dir, "trajectory_individual_tr.png")
+    fig_indiv.savefig(indiv_traj_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_indiv)
+    print(f"Saved Category 1B: {indiv_traj_path}")
 
 # =====================================================================
 # GRANGER CAUSALITY
