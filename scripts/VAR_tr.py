@@ -417,6 +417,31 @@ else:
     print("WARNING: No IRF records fitted, IRF plot skipped")
 
 
+# Helper function to plot individual coefficient heatmaps
+def plot_coeff_heatmap(ax, df, title_suffix):
+    cmap = plt.cm.RdBu
+    # Normalize centered at 0 since coefficients can be positive or negative
+    max_val = max(abs(df.values.min()), abs(df.values.max()), 0.01)
+    norm = mcolors.TwoSlopeNorm(vmin=-max_val, vcenter=0, vmax=max_val)
+    
+    im = ax.imshow(df.values, aspect='auto', cmap=cmap, norm=norm)
+    
+    ax.set_xticks(range(len(df.columns)))
+    ax.set_xticklabels(df.columns, rotation=45, ha='right', fontsize=10)
+    ax.set_yticks(range(len(df.index)))
+    ax.set_yticklabels(df.index, fontsize=10)
+    
+    # Add textual values inside the heatmap cells
+    for i in range(df.shape[0]):
+        for j in range(df.shape[1]):
+            val = df.values[i, j]
+            if np.isnan(val):
+                continue
+            ax.text(j, i, f"{val:.3f}", ha='center', va='center', 
+                    fontsize=9, color='black' if abs(val) < max_val * 0.5 else 'white')
+            
+    plt.colorbar(im, ax=ax, label='Coefficient Value')
+    ax.set_title(f"VAR Coefficients | {title_suffix}", pad=10, fontsize=12)
 
 # VAR coeff heatmaps (both per event and aggregated)
 coeff_records = {}

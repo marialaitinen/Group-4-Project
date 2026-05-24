@@ -38,7 +38,7 @@ grievance_columns = [
     'narrative_coup', 'narrative_violence'
 ]
 
-# Italian protest events
+# Italian protest events (PRESERVED EXPLICITLY)
 protest_starts_all = [
     pd.Timestamp("2020-03-25"), 
     pd.Timestamp("2011-10-15")
@@ -83,8 +83,8 @@ if all_windows:
         
     ax_traj.axvline(0, color='red', linestyle='--', linewidth=2, label='Protest Start')
     ax_traj.set_xlabel("Days before protest (0 = protest start)", fontsize=12)
-    ax_traj.set_ylabel("Avg differenced narrative score", fontsize=12)
-    ax_traj.set_title(f"Average Grievance Trajectory Across {len(protest_starts)} Pre-Protest Windows (IT)", fontsize=16, pad=15)
+    ax_traj.set_ylabel("Agg Avg differenced narrative score", fontsize=12)
+    ax_traj.set_title(f"Aggregated Average Grievance Trajectory Across {len(protest_starts)} Pre-Protest Windows (IT)", fontsize=16, pad=15)
     ax_traj.invert_xaxis()
     ax_traj.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=11)
     
@@ -92,6 +92,37 @@ if all_windows:
     fig_traj.savefig(traj_path, dpi=150, bbox_inches='tight')
     plt.close(fig_traj)
     print(f"\nSaved Category 1: {traj_path}")
+
+# =====================================================================
+# CATEGORY 1B: INDIVIDUAL ARITHMETIC TRAJECTORIES
+# =====================================================================
+if all_windows:
+    fig_indiv, axes_indiv = plt.subplots(1, len(protest_starts), 
+                                         figsize=(6 * len(protest_starts), 6), 
+                                         sharey=True, layout='constrained', squeeze=False)
+    axes_indiv = axes_indiv.flatten()
+    fig_indiv.suptitle("Individual Grievance Trajectories Per Protest Event (IT)", 
+                        fontsize=18, fontweight='bold', y=1.02)
+
+    for ax, window, start in zip(axes_indiv, all_windows, protest_starts):
+        for i, col in enumerate(grievance_columns):
+            label = col.replace("narrative_", "").upper()
+            ax.plot(window.index, window[col], marker='o', label=label,
+                    color=colors[i], linewidth=2, markersize=4)
+
+        ax.axvline(0, color='red', linestyle='--', linewidth=2, label='Protest Start')
+        ax.set_title(str(start.date()), fontsize=13, pad=10)
+        ax.set_xlabel("Days before protest", fontsize=11)
+        ax.invert_xaxis()
+        ax.grid(True, alpha=0.3)
+
+    axes_indiv[0].set_ylabel("Differenced narrative score", fontsize=12)
+    axes_indiv[-1].legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', fontsize=10)
+
+    indiv_traj_path = os.path.join(data_dir, "trajectory_individual_it.png")
+    fig_indiv.savefig(indiv_traj_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_indiv)
+    print(f"Saved Category 1B: {indiv_traj_path}")
 
 # =====================================================================
 # GRANGER CAUSALITY
@@ -271,5 +302,189 @@ if not results_df.empty:
     fig_events.savefig(events_path, dpi=150, bbox_inches='tight')
     plt.close(fig_events)
     print(f"Saved Category 3: {events_path}")
+
+# =====================================================================
+# CATEGORY 4: IMPULSE RESPONSE FUNCTIONS
+# =====================================================================
+FIXED_LAG = 7
+IRF_HORIZON = 16
+TARGET = 'narrative_protest_outcome'
+WINDOW_DAYS = 100 
+
+irf_records = {}
+
+for start in protest_starts:
+    try:
+        window_start = start - pd.Timedelta(days=WINDOW_DAYS)
+        window_idx = pd.date_range(start=window_start, end=start - pd.Timedelta(days=1), freq='D')
+        local_df = df_diff.reindex(window_idx, fill_value=0)
+
+        # Drop columns that are entirely zero — they cause singular matrices
+        local_df = local_df.loc[:, (local_df != 0).any(axis=0)]
+
+        if len(local_df) < FIXED_LAG + 10:
+            print(f"Skipping {start.date()}: insufficient data ({len(local_df)} rows)")
+            continue
+
+        if local_df.shape[1] < 2:
+            print(f"Skipping {start.date()}: too few non-zero columns")
+            continue
+
+        results = VAR(local_df).fit(FIXED_LAG)
+        irf = results.irf(IRF_HORIZON)
+
+        var_names = local_df.columns.tolist()
+
+        if TARGET not in var_names:
+            print(f"Skipping {start.date()}: TARGET column was all-zero and got dropped")
+            continue
+
+        target_idx = var_names.index(TARGET)
+
+        event_irfs = {}
+        for grievance in grievance_columns:
+            if grievance in var_names:
+                shock_idx = var_names.index(grievance)
+                event_irfs[grievance] = irf.orth_irfs[:, target_idx, shock_idx]
+
+        irf_records[str(start.date())] = event_irfs
+        print(f"IRF fitted for {start.date()} on {len(local_df)} rows, {local_df.shape[1]} cols")
+    except Exception as e:
+        print(f"IRF failed for {start.date()}: {e}")
+
+# Aggregated IRF
+if irf_records:
+    agg_irf = {}
+    for grievance in grievance_columns:
+        arrays = [irf_records[d][grievance] for d in irf_records if grievance in irf_records[d]]
+        if arrays:
+            agg_irf[grievance] = np.mean(arrays, axis=0)
+
+    # Plot
+    n_panels = len(irf_records) + 1
+    fig_irf, axes_irf = plt.subplots(1, n_panels, figsize=(5 * n_panels, 5),
+                                      sharey=True, layout='constrained', squeeze=False)
+    axes_irf = axes_irf.flatten()
+    fig_irf.suptitle("Impulse Response Functions: Shock to Protest Outcome (IT)",
+                      fontsize=18, fontweight='bold', y=1.02)
+
+    horizon_x = range(IRF_HORIZON + 1)
+
+    for ax, (protest_date, event_irfs) in zip(axes_irf, irf_records.items()):
+        for i, grievance in enumerate(grievance_columns):
+            if grievance in event_irfs:
+                label = grievance.replace("narrative_", "").upper()
+                ax.plot(horizon_x, event_irfs[grievance],
+                        marker='o', markersize=3, linewidth=2,
+                        label=label, color=colors[i % len(colors)])
+        ax.axhline(0, color='black', linewidth=1, linestyle='--', alpha=0.5)
+        ax.set_title(protest_date, fontsize=12, pad=8)
+        ax.set_xlabel("Days after shock", fontsize=10)
+        ax.grid(True, alpha=0.3)
+
+    ax_agg = axes_irf[len(irf_records)]
+    for i, grievance in enumerate(grievance_columns):
+        if grievance in agg_irf:
+            label = grievance.replace("narrative_", "").upper()
+            ax_agg.plot(horizon_x, agg_irf[grievance],
+                        marker='o', markersize=3, linewidth=2.5,
+                        label=label, color=colors[i % len(colors)])
+    ax_agg.axhline(0, color='black', linewidth=1, linestyle='--', alpha=0.5)
+    ax_agg.set_title("Aggregated (mean)", fontsize=12, pad=8)
+    ax_agg.set_xlabel("Days after shock", fontsize=10)
+    ax_agg.grid(True, alpha=0.3)
+
+    axes_irf[0].set_ylabel("Response in protest outcome", fontsize=11)
+    axes_irf[-1].legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', fontsize=10)
+
+    irf_path = os.path.join(data_dir, "irf_it.png")
+    fig_irf.savefig(irf_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_irf)
+    print(f"Saved Category 4: {irf_path}")
+else:
+    print("WARNING: No IRF records fitted, IRF plot skipped")
+
+# =====================================================================
+# CATEGORY 5: VAR COEFFICIENT HEATMAPS
+# =====================================================================
+def plot_coeff_heatmap(ax, df, title_suffix):
+    cmap = plt.cm.RdBu
+    max_val = max(abs(df.values.min()), abs(df.values.max()), 0.01)
+    norm = mcolors.TwoSlopeNorm(vmin=-max_val, vcenter=0, vmax=max_val)
+    
+    im = ax.imshow(df.values, aspect='auto', cmap=cmap, norm=norm)
+    
+    ax.set_xticks(range(len(df.columns)))
+    ax.set_xticklabels(df.columns, rotation=45, ha='right', fontsize=10)
+    ax.set_yticks(range(len(df.index)))
+    ax.set_yticklabels(df.index, fontsize=10)
+    
+    for i in range(df.shape[0]):
+        for j in range(df.shape[1]):
+            val = df.values[i, j]
+            if np.isnan(val):
+                continue
+            ax.text(j, i, f"{val:.3f}", ha='center', va='center', 
+                    fontsize=9, color='black' if abs(val) < max_val * 0.5 else 'white')
+            
+    plt.colorbar(im, ax=ax, label='Coefficient Value')
+    ax.set_title(f"VAR Coefficients | {title_suffix}", pad=10, fontsize=12)
+
+coeff_records = {}
+
+for start in protest_starts:
+    try:
+        window_start = start - pd.Timedelta(days=WINDOW_DAYS)
+        window_idx = pd.date_range(start=window_start, end=start - pd.Timedelta(days=1), freq='D')
+        local_df = df_diff.reindex(window_idx, fill_value=0)
+
+        if len(local_df) < FIXED_LAG + 10:
+            print(f"Skipping {start.date()}: insufficient data ({len(local_df)} rows)")
+            continue
+
+        results = VAR(local_df).fit(FIXED_LAG)
+        var_names = local_df.columns.tolist()
+        target_idx = var_names.index(TARGET)
+
+        rows = {}
+        for grievance in grievance_columns:
+            if grievance in var_names:
+                shock_idx = var_names.index(grievance)
+                lag_coefs = [results.coefs[lag, target_idx, shock_idx]
+                             for lag in range(FIXED_LAG)]
+                rows[grievance.replace("narrative_", "").upper()] = lag_coefs
+
+        coeff_df = pd.DataFrame(rows, index=[f"lag{i+1}" for i in range(FIXED_LAG)]).T
+        coeff_records[str(start.date())] = coeff_df
+        print(f"Coefficients fitted for {start.date()}")
+    except Exception as e:
+        print(f"Coeff heatmap failed for {start.date()}: {e}")
+
+if coeff_records:
+    all_coeff_arrays = np.array([df.values for df in coeff_records.values()])
+    agg_coeff_df = pd.DataFrame(
+        np.mean(all_coeff_arrays, axis=0),
+        index=list(coeff_records.values())[0].index,
+        columns=list(coeff_records.values())[0].columns
+    )
+
+    n_hm = len(coeff_records) + 1
+    fig_hm2, axes_hm2 = plt.subplots(1, n_hm, figsize=(4.5 * n_hm, 6),
+                                     layout='constrained', squeeze=False)
+    axes_hm2 = axes_hm2.flatten()
+    fig_hm2.suptitle("VAR Coefficients: Grievances to Protest Outcome (IT)",
+                      fontsize=18, fontweight='bold', y=1.02)
+
+    for ax, (protest_date, coeff_df) in zip(axes_hm2, coeff_records.items()):
+        plot_coeff_heatmap(ax, coeff_df, protest_date)
+
+    plot_coeff_heatmap(axes_hm2[len(coeff_records)], agg_coeff_df, "Aggregated (mean)")
+
+    coeff_path = os.path.join(data_dir, "coeff_heatmap_it.png")
+    fig_hm2.savefig(coeff_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_hm2)
+    print(f"Saved Category 5: {coeff_path}")
+else:
+    print("WARNING: No coefficient records fitted, coeff heatmap skipped")
 
 print("\nProcessing complete.")
