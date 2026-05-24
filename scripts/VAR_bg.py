@@ -11,7 +11,7 @@ import numpy as np
 warnings.filterwarnings("ignore", category=UserWarning, module="statsmodels.tsa.base.tsa_model")
 warnings.filterwarnings("ignore")
 
-# --- DYNAMIC PATH SETUP ---
+# Dynamic path setup
 script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(os.path.dirname(script_dir), "data")
 os.makedirs(data_dir, exist_ok=True)
@@ -55,9 +55,9 @@ for t in protest_starts:
 
 n_events = max(1, len(protest_starts))
 
-# =====================================================================
+
 # CATEGORY 1: PRE-PROTEST TRAJECTORY PLOT
-# =====================================================================
+
 max_lag = 28
 all_windows = []
 
@@ -94,9 +94,9 @@ if all_windows:
     plt.close(fig_traj)
     print(f"\nSaved Category 1: {traj_path}")
 
-# =====================================================================
+
 # CATEGORY 1B: INDIVIDUAL ARITHMETIC TRAJECTORIES
-# =====================================================================
+
 if all_windows:
     fig_indiv, axes_indiv = plt.subplots(1, len(protest_starts), 
                                          figsize=(6 * len(protest_starts), 6), 
@@ -125,9 +125,9 @@ if all_windows:
     plt.close(fig_indiv)
     print(f"Saved Category 1B: {indiv_traj_path}")
 
-# =====================================================================
+
 # GRANGER CAUSALITY
-# =====================================================================
+
 model = VAR(df_diff)
 lags_to_test = [5, 6, 7, 8, 9, 14, 15, 16]
 granger_records = []
@@ -160,9 +160,9 @@ if not granger_df.empty:
 else:
     print("\nWARNING: No Granger records generated.")
 
-# =====================================================================
+
 # PEARSON LAGGED CORRELATION (FIXED ZERO-VARIANCE & TIME GAPS)
-# =====================================================================
+
 PRE_DAYS = 16
 POST_DAYS = 9
 records = []
@@ -208,9 +208,9 @@ if not results_df.empty:
     avg_results['significant'] = (avg_results['significant'] >= 0.5).astype(int)
     results_df.to_csv(os.path.join(data_dir, "lagged_correlations_bg.csv"), index=False)
 
-# =====================================================================
+
 # CATEGORY 2: HEATMAPS (Full, 5-Day, 3-Day)
-# =====================================================================
+
 def plot_heatmap_on_ax(avg_df, lag_range, title_suffix, ax):
     subset = avg_df[avg_df['lag'].isin(lag_range)]
     if subset.empty:
@@ -267,9 +267,9 @@ if not results_df.empty:
     plt.close(fig_hm)
     print(f"Saved Category 2: {hm_path}")
 
-# =====================================================================
+
 # CATEGORY 3: PER-EVENT LINE PLOTS
-# =====================================================================
+
 if not results_df.empty:
     fig_events, axes_events = plt.subplots(1, n_events, figsize=(5 * max(n_events, 2), 6), sharey=True, layout='constrained', squeeze=False)
     axes_events = axes_events.flatten()
@@ -304,9 +304,9 @@ if not results_df.empty:
     plt.close(fig_events)
     print(f"Saved Category 3: {events_path}")
 
-# =====================================================================
+
 # CATEGORY 4: IMPULSE RESPONSE FUNCTIONS
-# =====================================================================
+
 FIXED_LAG = 7
 IRF_HORIZON = 16
 TARGET = 'narrative_protest_outcome'
@@ -405,9 +405,9 @@ if irf_records:
 else:
     print("WARNING: No IRF records fitted, IRF plot skipped")
 
-# =====================================================================
+
 # CATEGORY 5: VAR COEFFICIENT HEATMAPS
-# =====================================================================
+
 def plot_coeff_heatmap(ax, df, title_suffix):
     cmap = plt.cm.RdBu
     max_val = max(abs(df.values.min()), abs(df.values.max()), 0.01)
