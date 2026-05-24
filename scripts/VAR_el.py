@@ -3,7 +3,7 @@ from statsmodels.tsa.api import VAR
 import warnings
 import os
 from scipy.stats import pearsonr
-import matplotlib.plt as plt
+import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 
