@@ -2,6 +2,7 @@ import pandas as pd
 from statsmodels.tsa.api import VAR
 import warnings
 import os
+import glob
 from scipy.stats import pearsonr
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -11,7 +12,10 @@ import numpy as np
 warnings.filterwarnings("ignore", category=UserWarning, module="statsmodels.tsa.base.tsa_model")
 warnings.filterwarnings("ignore")
 
-# --- DYNAMIC PATH SETUP ---
+# =====================================================================
+# GLOBAL DYNAMIC PATH SETUP
+# =====================================================================
+# Both reading and writing functions will now safely reference this same folder
 script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(os.path.dirname(script_dir), "data")
 os.makedirs(data_dir, exist_ok=True)
@@ -96,12 +100,11 @@ if all_windows:
     plt.close(fig_traj)
     print(f"\nSaved Category 1: {traj_path}")
 
-#INDIVIDUAL ARITHMETHIC TRAJECTORIES
-
+# INDIVIDUAL ARITHMETHIC TRAJECTORIES
 if all_windows:
     fig_indiv, axes_indiv = plt.subplots(1, len(protest_starts), 
-                                          figsize=(6 * len(protest_starts), 6), 
-                                          sharey=True, layout='constrained', squeeze=False)
+                                         figsize=(6 * len(protest_starts), 6), 
+                                         sharey=True, layout='constrained', squeeze=False)
     axes_indiv = axes_indiv.flatten()
     fig_indiv.suptitle("Individual Grievance Trajectories Per Protest Event (TR)", 
                         fontsize=18, fontweight='bold', y=1.02)
@@ -169,7 +172,6 @@ POST_DAYS = 9
 records = []
 
 for start in protest_starts:
-    # Continuous calendar index ensures accurate lagging and prevents empty binary arrays
     window_idx = pd.date_range(start=start - pd.Timedelta(days=PRE_DAYS), 
                                end=start + pd.Timedelta(days=POST_DAYS), freq='D')
     
@@ -185,12 +187,11 @@ for start in protest_starts:
             aligned = pd.concat([shifted, pd.Series(protest_binary, index=window.index)], axis=1).dropna()
             
             if len(aligned) > 2:
-                # Check for zero variance to prevent math errors returning NaN
                 std_x = aligned.iloc[:, 0].std()
                 std_y = aligned.iloc[:, 1].std()
                 
                 if std_x == 0 or std_y == 0:
-                    corr, p_val = 0.0, 1.0  # Flatline -> explicitly zero correlation
+                    corr, p_val = 0.0, 1.0
                 else:
                     corr, p_val = pearsonr(aligned.iloc[:, 0], aligned.iloc[:, 1])
                     
@@ -307,16 +308,13 @@ if not results_df.empty:
 
 print("\nProcessing complete.")
 
-
-# impulse response functions graphs (per event and aggregated)
-#IRF checks how narrative_protest_outcome responds over the next N days if narrative_gov (or any grievance) suddenly spikes by one unit today
+# =====================================================================
+# IMPULSE RESPONSE FUNCTIONS
+# =====================================================================
 FIXED_LAG = 7
 IRF_HORIZON = 16
 TARGET = 'narrative_protest_outcome'
-WINDOW_DAYS = 100 #didnt pass full df, would give the same result regardless of event
-#also didnt do 28 days window, that is too little for 7 coeffs in VAR, so i compromised a bit 
-#by not making it really big to not also cook up the consistency
-#NOTE: you can increase the window days if it doesnt deliver sufficient results
+WINDOW_DAYS = 100 
 
 irf_records = {}
 
@@ -325,8 +323,6 @@ for start in protest_starts:
         window_start = start - pd.Timedelta(days=WINDOW_DAYS)
         window_idx = pd.date_range(start=window_start, end=start - pd.Timedelta(days=1), freq='D')
         local_df = df_diff.reindex(window_idx, fill_value=0)
-
-        # Drop columns that are entirely zero — they cause singular matrices
         local_df = local_df.loc[:, (local_df != 0).any(axis=0)]
 
         if len(local_df) < FIXED_LAG + 10:
@@ -339,7 +335,6 @@ for start in protest_starts:
 
         results = VAR(local_df).fit(FIXED_LAG)
         irf = results.irf(IRF_HORIZON)
-
         var_names = local_df.columns.tolist()
 
         if TARGET not in var_names:
@@ -347,23 +342,18 @@ for start in protest_starts:
             continue
 
         target_idx = var_names.index(TARGET)
-
         event_irfs = {}
         for grievance in grievance_columns:
             if grievance in var_names:
                 shock_idx = var_names.index(grievance)
-                #used orthogonal irf, apparenlty more robust with sparse data
                 event_irfs[grievance] = irf.orth_irfs[:, target_idx, shock_idx]
 
         irf_records[str(start.date())] = event_irfs
         print(f"IRF fitted for {start.date()} on {len(local_df)} rows, {local_df.shape[1]} cols")
     except Exception as e:
         print(f"IRF failed for {start.date()}: {e}")
-        import traceback
-        traceback.print_exc()
 
-
-#aggregated IRF
+# Aggregated IRF
 if irf_records:
     agg_irf = {}
     for grievance in grievance_columns:
@@ -371,7 +361,6 @@ if irf_records:
         if arrays:
             agg_irf[grievance] = np.mean(arrays, axis=0)
 
-    # Plot
     n_panels = len(irf_records) + 1
     fig_irf, axes_irf = plt.subplots(1, n_panels, figsize=(5 * n_panels, 5),
                                       sharey=True, layout='constrained', squeeze=False)
@@ -416,22 +405,20 @@ if irf_records:
 else:
     print("WARNING: No IRF records fitted, IRF plot skipped")
 
-
-# Helper function to plot individual coefficient heatmaps
+# =====================================================================
+# VAR COEFFICIENT HEATMAP BREAKDOWN
+# =====================================================================
 def plot_coeff_heatmap(ax, df, title_suffix):
     cmap = plt.cm.RdBu
-    # Normalize centered at 0 since coefficients can be positive or negative
     max_val = max(abs(df.values.min()), abs(df.values.max()), 0.01)
     norm = mcolors.TwoSlopeNorm(vmin=-max_val, vcenter=0, vmax=max_val)
     
     im = ax.imshow(df.values, aspect='auto', cmap=cmap, norm=norm)
-    
     ax.set_xticks(range(len(df.columns)))
     ax.set_xticklabels(df.columns, rotation=45, ha='right', fontsize=10)
     ax.set_yticks(range(len(df.index)))
     ax.set_yticklabels(df.index, fontsize=10)
     
-    # Add textual values inside the heatmap cells
     for i in range(df.shape[0]):
         for j in range(df.shape[1]):
             val = df.values[i, j]
@@ -443,7 +430,6 @@ def plot_coeff_heatmap(ax, df, title_suffix):
     plt.colorbar(im, ax=ax, label='Coefficient Value')
     ax.set_title(f"VAR Coefficients | {title_suffix}", pad=10, fontsize=12)
 
-# VAR coeff heatmaps (both per event and aggregated)
 coeff_records = {}
 
 for start in protest_starts:
@@ -464,8 +450,7 @@ for start in protest_starts:
         for grievance in grievance_columns:
             if grievance in var_names:
                 shock_idx = var_names.index(grievance)
-                lag_coefs = [results.coefs[lag, target_idx, shock_idx]
-                             for lag in range(FIXED_LAG)]
+                lag_coefs = [results.coefs[lag, target_idx, shock_idx] for lag in range(FIXED_LAG)]
                 rows[grievance.replace("narrative_", "").upper()] = lag_coefs
 
         coeff_df = pd.DataFrame(rows, index=[f"lag{i+1}" for i in range(FIXED_LAG)]).T
@@ -473,9 +458,6 @@ for start in protest_starts:
         print(f"Coefficients fitted for {start.date()}")
     except Exception as e:
         print(f"Coeff heatmap failed for {start.date()}: {e}")
-
-#for aggregation of coeffs
-agg_coeff_df = None  
 
 if coeff_records:
     all_coeff_arrays = np.array([df.values for df in coeff_records.values()])
@@ -486,13 +468,11 @@ if coeff_records:
     )
 
     n_hm = len(coeff_records) + 1
-    fig_hm2, axes_hm2 = plt.subplots(1, n_hm, figsize=(4.5 * n_hm, 6),
-                                       layout='constrained', squeeze=False)
+    fig_hm2, axes_hm2 = plt.subplots(1, n_hm, figsize=(4.5 * n_hm, 6), layout='constrained')
     axes_hm2 = axes_hm2.flatten()
-    fig_hm2.suptitle("VAR Coefficients: Grievances to Protest Outcome (TR)",
-                      fontsize=18, fontweight='bold', y=1.02)
+    fig_hm2.suptitle("VAR Coefficients: Grievances to Protest Outcome (TR)", fontsize=18, fontweight='bold', y=1.02)
 
-    for ax, (protest_date, coeff_df) in zip(axes_hm2, coeff_records.items()):
+    for ax, (protest_date, coeff_df) in zip(axes_hm2 if len(axes_hm2) > 1 else [axes_hm2], coeff_records.items()):
         plot_coeff_heatmap(ax, coeff_df, protest_date)
 
     plot_coeff_heatmap(axes_hm2[len(coeff_records)], agg_coeff_df, "Aggregated (mean)")
@@ -505,47 +485,35 @@ else:
     print("WARNING: No coefficient records fitted, coeff heatmap skipped")
 
 
-
-#ADDITIONS
-
-import glob
-
-# --- PATH SETUP ---
-script_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(script_dir, "data")
-
-#loading all lagged correlation stuff
+# =====================================================================
+# ADDITIONS: CROSS-COUNTRY ANALYSIS
+# =====================================================================
+# Look for all lagged correlations outputs generated in our unified data folder
 pattern = os.path.join(data_dir, "lagged_correlations_*.csv")
 files = glob.glob(pattern)
 
 if not files:
-    print(f"No lagged_correlations_*.csv files found in {data_dir}")
+    print(f"No lagged_correlations_*.csv files found in {data_dir}. Ensure 'lagged_correlations_tr.csv' was saved successfully.")
     exit()
 
 all_data = []
 for f in files:
     lang_code = os.path.basename(f).replace("lagged_correlations_", "").replace(".csv", "").upper()
-    df = pd.read_csv(f)
-    df['country'] = lang_code
-    all_data.append(df)
+    df_country = pd.read_csv(f)
+    df_country['country'] = lang_code
+    all_data.append(df_country)
 
 combined = pd.concat(all_data, ignore_index=True)
 print(f"Loaded {len(files)} countries: {[os.path.basename(f) for f in files]}")
 
-#avg corr per country
-avg = (
-    combined
-    .groupby(['country', 'grievance', 'lag'])['correlation']
-    .mean()
-    .reset_index()
-)
-
+# Average correlation per country
+avg = combined.groupby(['country', 'grievance', 'lag'])['correlation'].mean().reset_index()
 avg['grievance_clean'] = avg['grievance'].str.replace('narrative_', '').str.upper()
 
 grievances = sorted(avg['grievance_clean'].unique())
 countries = sorted(avg['country'].unique())
 
-#only pre-protest lags for ranking
+# Only pre-protest lags for ranking
 pre = avg[avg['lag'] > 0]
 
 top_narrative_per_country = (
@@ -559,8 +527,7 @@ best_per_country = top_narrative_per_country.groupby('country').first().reset_in
 print("\nTop narrative per country (highest pre-protest Pearson r):")
 print(best_per_country[['country', 'grievance_clean', 'correlation']].to_string(index=False))
 
-#we have 2 methods for ranking
-#1: top 4 by mean correlation across all countries 
+# Ranking Strategy 1: Top 4 by mean correlation across all countries 
 global_top_avg = (
     pre.groupby('grievance_clean')['correlation']
     .mean()
@@ -570,7 +537,7 @@ global_top_avg = (
 )
 print(f"\nTop 4 narratives (by mean correlation): {global_top_avg}")
 
-# 2: top 4 by number of countries exceeding threshold
+# Ranking Strategy 2: Top 4 by number of countries exceeding threshold
 THRESHOLD = 0.1
 peak_per_country_narrative = (
     pre.groupby(['country', 'grievance_clean'])['correlation']
@@ -588,11 +555,11 @@ global_top_count = (
 )
 print(f"Top 4 narratives (by country count above r={THRESHOLD}): {global_top_count}")
 
-cmap = cm.get_cmap('tab20', len(countries))
-country_colors = {c: cmap(i) for i, c in enumerate(countries)}
+# Modern Matplotlib map constructor setup
+cmap_colors = plt.colormaps['tab20'].resampled(max(1, len(countries)))
+country_colors = {c: cmap_colors(i) for i, c in enumerate(countries)}
 
-
-# first plot: top 4 by mean correlation
+# Plot 1: Top 4 by mean correlation
 fig_a, axes_a = plt.subplots(2, 2, figsize=(16, 12), layout='constrained')
 axes_a = axes_a.flatten()
 fig_a.suptitle(
@@ -635,8 +602,7 @@ fig_a.savefig(path_a, dpi=150, bbox_inches='tight')
 plt.close(fig_a)
 print(f"\nSaved: {path_a}")
 
-
-#plot 2: top 4 by country count above threshold
+# Plot 2: Top 4 by country count above threshold
 fig_b, axes_b = plt.subplots(2, 2, figsize=(16, 12), layout='constrained')
 axes_b = axes_b.flatten()
 fig_b.suptitle(
@@ -696,12 +662,8 @@ fig_b.savefig(path_b, dpi=150, bbox_inches='tight')
 plt.close(fig_b)
 print(f"Saved: {path_b}")
 
-#plot 3: heatmap of peak pre-protest correlation per country x narrative
-pivot = (
-    pre.groupby(['country', 'grievance_clean'])['correlation']
-    .max()
-    .unstack(fill_value=0)
-)
+# Plot 3: Heatmap of peak pre-protest correlation per country x narrative
+pivot = pre.groupby(['country', 'grievance_clean'])['correlation'].max().unstack(fill_value=0)
 
 fig_c, ax_c = plt.subplots(figsize=(14, max(4, len(countries) * 0.5 + 2)), layout='constrained')
 im = ax_c.imshow(pivot.values, aspect='auto', cmap='RdYlGn', vmin=-0.3, vmax=0.3)
