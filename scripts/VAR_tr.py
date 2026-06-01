@@ -503,3 +503,229 @@ if coeff_records:
     print(f"Saved Category 5: {coeff_path}")
 else:
     print("WARNING: No coefficient records fitted, coeff heatmap skipped")
+
+
+
+#ADDITIONS
+
+import glob
+
+# --- PATH SETUP ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(script_dir, "data")
+
+#loading all lagged correlation stuff
+pattern = os.path.join(data_dir, "lagged_correlations_*.csv")
+files = glob.glob(pattern)
+
+if not files:
+    print(f"No lagged_correlations_*.csv files found in {data_dir}")
+    exit()
+
+all_data = []
+for f in files:
+    lang_code = os.path.basename(f).replace("lagged_correlations_", "").replace(".csv", "").upper()
+    df = pd.read_csv(f)
+    df['country'] = lang_code
+    all_data.append(df)
+
+combined = pd.concat(all_data, ignore_index=True)
+print(f"Loaded {len(files)} countries: {[os.path.basename(f) for f in files]}")
+
+#avg corr per country
+avg = (
+    combined
+    .groupby(['country', 'grievance', 'lag'])['correlation']
+    .mean()
+    .reset_index()
+)
+
+avg['grievance_clean'] = avg['grievance'].str.replace('narrative_', '').str.upper()
+
+grievances = sorted(avg['grievance_clean'].unique())
+countries = sorted(avg['country'].unique())
+
+#only pre-protest lags for ranking
+pre = avg[avg['lag'] > 0]
+
+top_narrative_per_country = (
+    pre.groupby(['country', 'grievance_clean'])['correlation']
+    .max()
+    .reset_index()
+    .sort_values('correlation', ascending=False)
+)
+
+best_per_country = top_narrative_per_country.groupby('country').first().reset_index()
+print("\nTop narrative per country (highest pre-protest Pearson r):")
+print(best_per_country[['country', 'grievance_clean', 'correlation']].to_string(index=False))
+
+#we have 2 methods for ranking
+#1: top 4 by mean correlation across all countries 
+global_top_avg = (
+    pre.groupby('grievance_clean')['correlation']
+    .mean()
+    .sort_values(ascending=False)
+    .head(4)
+    .index.tolist()
+)
+print(f"\nTop 4 narratives (by mean correlation): {global_top_avg}")
+
+# 2: top 4 by number of countries exceeding threshold
+THRESHOLD = 0.1
+peak_per_country_narrative = (
+    pre.groupby(['country', 'grievance_clean'])['correlation']
+    .max()
+    .reset_index()
+    .rename(columns={'correlation': 'peak_r'})
+)
+global_top_count = (
+    peak_per_country_narrative[peak_per_country_narrative['peak_r'] >= THRESHOLD]
+    .groupby('grievance_clean')['country']
+    .count()
+    .sort_values(ascending=False)
+    .head(4)
+    .index.tolist()
+)
+print(f"Top 4 narratives (by country count above r={THRESHOLD}): {global_top_count}")
+
+cmap = cm.get_cmap('tab20', len(countries))
+country_colors = {c: cmap(i) for i, c in enumerate(countries)}
+
+
+# first plot: top 4 by mean correlation
+fig_a, axes_a = plt.subplots(2, 2, figsize=(16, 12), layout='constrained')
+axes_a = axes_a.flatten()
+fig_a.suptitle(
+    "Pearson Lagged Correlation by Country — Top 4 Narratives (ranked by mean correlation)\n"
+    "(+lag = days before protest, –lag = days after protest)",
+    fontsize=15, fontweight='bold', y=1.02
+)
+
+for ax, narrative in zip(axes_a, global_top_avg):
+    subset = avg[avg['grievance_clean'] == narrative]
+    for country in countries:
+        country_data = subset[subset['country'] == country].sort_values('lag')
+        if country_data.empty:
+            continue
+        ax.plot(
+            country_data['lag'], country_data['correlation'],
+            linewidth=1.8, alpha=0.8, label=country,
+            color=country_colors[country]
+        )
+    ax.axvline(0, color='red', linestyle='--', linewidth=1.5, label='Protest day')
+    ax.axhline(0, color='gray', linestyle=':', linewidth=1, alpha=0.6)
+    ax.set_title(narrative, fontsize=13, fontweight='bold', pad=8)
+    ax.set_xlabel("Lag (days)", fontsize=11)
+    ax.set_ylabel("Pearson r", fontsize=11)
+    ax.grid(True, alpha=0.25)
+    ax.set_xlim(avg['lag'].min(), avg['lag'].max())
+
+handles_a, labels_a = axes_a[0].get_legend_handles_labels()
+protest_h = [h for h, l in zip(handles_a, labels_a) if l == 'Protest day']
+country_h = [h for h, l in zip(handles_a, labels_a) if l != 'Protest day']
+country_l = [l for l in labels_a if l != 'Protest day']
+axes_a[-1].legend(
+    country_h + protest_h, country_l + ['Protest day'],
+    bbox_to_anchor=(1.05, 1.0), loc='upper left',
+    fontsize=9, title='Country', title_fontsize=10
+)
+
+path_a = os.path.join(data_dir, "comparison_top_narratives_avg.png")
+fig_a.savefig(path_a, dpi=150, bbox_inches='tight')
+plt.close(fig_a)
+print(f"\nSaved: {path_a}")
+
+
+#plot 2: top 4 by country count above threshold
+fig_b, axes_b = plt.subplots(2, 2, figsize=(16, 12), layout='constrained')
+axes_b = axes_b.flatten()
+fig_b.suptitle(
+    f"Pearson Lagged Correlation by Country — Top 4 Narratives (ranked by country count, r ≥ {THRESHOLD})\n"
+    "(+lag = days before protest, –lag = days after protest)\n"
+    "Bold lines = countries exceeding threshold   Faded = below threshold",
+    fontsize=14, fontweight='bold', y=1.03
+)
+
+for ax, narrative in zip(axes_b, global_top_count):
+    subset = avg[avg['grievance_clean'] == narrative]
+    n_above = len(
+        peak_per_country_narrative[
+            (peak_per_country_narrative['grievance_clean'] == narrative) &
+            (peak_per_country_narrative['peak_r'] >= THRESHOLD)
+        ]
+    )
+    for country in countries:
+        country_data = subset[subset['country'] == country].sort_values('lag')
+        if country_data.empty:
+            continue
+        peak = peak_per_country_narrative[
+            (peak_per_country_narrative['country'] == country) &
+            (peak_per_country_narrative['grievance_clean'] == narrative)
+        ]['peak_r'].values
+        above = len(peak) > 0 and peak[0] >= THRESHOLD
+        ax.plot(
+            country_data['lag'], country_data['correlation'],
+            linewidth=2.2 if above else 1.0,
+            alpha=0.9 if above else 0.2,
+            label=country if above else '_nolegend_',
+            color=country_colors[country]
+        )
+    ax.axvline(0, color='red', linestyle='--', linewidth=1.5, label='Protest day')
+    ax.axhline(0, color='gray', linestyle=':', linewidth=1, alpha=0.6)
+    ax.axhline(THRESHOLD, color='orange', linestyle=':', linewidth=1.2, alpha=0.8, label=f'r={THRESHOLD} threshold')
+    ax.set_title(f"{narrative}  ({n_above}/{len(countries)} countries above threshold)", fontsize=12, fontweight='bold', pad=8)
+    ax.set_xlabel("Lag (days)", fontsize=11)
+    ax.set_ylabel("Pearson r", fontsize=11)
+    ax.grid(True, alpha=0.25)
+    ax.set_xlim(avg['lag'].min(), avg['lag'].max())
+
+handles_b, labels_b = axes_b[0].get_legend_handles_labels()
+protest_h = [h for h, l in zip(handles_b, labels_b) if l == 'Protest day']
+thresh_h = [h for h, l in zip(handles_b, labels_b) if l == f'r={THRESHOLD} threshold']
+country_h = [h for h, l in zip(handles_b, labels_b) if l not in ['Protest day', f'r={THRESHOLD} threshold']]
+country_l = [l for l in labels_b if l not in ['Protest day', f'r={THRESHOLD} threshold']]
+axes_b[-1].legend(
+    country_h + protest_h + thresh_h,
+    country_l + ['Protest day'] + [f'r={THRESHOLD} threshold'],
+    bbox_to_anchor=(1.05, 1.0), loc='upper left',
+    fontsize=9, title='Country (bold = above threshold)', title_fontsize=10
+)
+
+path_b = os.path.join(data_dir, "comparison_top_narratives_countrycount.png")
+fig_b.savefig(path_b, dpi=150, bbox_inches='tight')
+plt.close(fig_b)
+print(f"Saved: {path_b}")
+
+#plot 3: heatmap of peak pre-protest correlation per country x narrative
+pivot = (
+    pre.groupby(['country', 'grievance_clean'])['correlation']
+    .max()
+    .unstack(fill_value=0)
+)
+
+fig_c, ax_c = plt.subplots(figsize=(14, max(4, len(countries) * 0.5 + 2)), layout='constrained')
+im = ax_c.imshow(pivot.values, aspect='auto', cmap='RdYlGn', vmin=-0.3, vmax=0.3)
+
+ax_c.set_xticks(range(len(pivot.columns)))
+ax_c.set_xticklabels(pivot.columns, rotation=45, ha='right', fontsize=11)
+ax_c.set_yticks(range(len(pivot.index)))
+ax_c.set_yticklabels(pivot.index, fontsize=11)
+
+for i in range(pivot.shape[0]):
+    for j in range(pivot.shape[1]):
+        val = pivot.values[i, j]
+        ax_c.text(j, i, f"{val:.2f}", ha='center', va='center',
+                  fontsize=9, color='black' if abs(val) < 0.2 else 'white')
+
+plt.colorbar(im, ax=ax_c, label='Peak pre-protest Pearson r')
+ax_c.set_title(
+    "Peak Pre-Protest Correlation by Country and Narrative\n(maximum Pearson r in the 16 days before protest onset)",
+    fontsize=13, pad=10
+)
+
+path_c = os.path.join(data_dir, "comparison_heatmap.png")
+fig_c.savefig(path_c, dpi=150, bbox_inches='tight')
+plt.close(fig_c)
+print(f"Saved: {path_c}")
+
+print("\nDone.")
